@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import sqlite3
-import joblib
 import os
 
 # -------------------- APP SETUP --------------------
@@ -8,7 +7,7 @@ import os
 app = Flask(__name__)
 app.secret_key = "lt_hospital_secret_key"
 
-# REQUIRED FOR RENDER (HTTPS SESSIONS)
+# Required for HTTPS (Render)
 app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=True
@@ -21,18 +20,31 @@ DB_NAME = "appointments.db"
 def get_db():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
+
+    # ALWAYS ensure table exists (critical for Render)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_name TEXT NOT NULL,
+            symptoms TEXT NOT NULL,
+            severity_score INTEGER,
+            risk_level TEXT,
+            priority INTEGER
+        )
+    """)
+    conn.commit()
+
     return conn
-
-# -------------------- LOAD ML MODEL --------------------
-
-MODEL_PATH = os.path.join("ml", "risk_model.pkl")
-model = joblib.load(MODEL_PATH)
 
 # -------------------- HOME & STATIC PAGES --------------------
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/home")
+def home():
+    return redirect(url_for("index"))
 
 @app.route("/about")
 def about():
@@ -58,7 +70,7 @@ def patient():
 
 @app.route("/book-appointment", methods=["POST"])
 def book_appointment():
-    # SUPPORT BOTH JSON & FORM DATA (IMPORTANT FOR LIVE SERVER)
+    # Accept both JSON and Form data
     if request.is_json:
         data = request.get_json()
         patient_name = data.get("patient_name")
@@ -132,10 +144,16 @@ def doctor_dashboard():
         return redirect(url_for("doctor_login"))
 
     conn = get_db()
-    rows = conn.execute("""
-        SELECT * FROM appointments
-        ORDER BY priority ASC, id ASC
-    """).fetchall()
+
+    try:
+        rows = conn.execute("""
+            SELECT id, patient_name, symptoms, severity_score, risk_level, priority
+            FROM appointments
+            ORDER BY priority ASC, id ASC
+        """).fetchall()
+    except Exception:
+        rows = []
+
     conn.close()
 
     appointments = []
@@ -163,7 +181,7 @@ def delete_appointment(appointment_id):
 
     return redirect(url_for("doctor_dashboard"))
 
-# -------------------- RUN APP --------------------
+# -------------------- RUN --------------------
 
 if __name__ == "__main__":
     app.run()
