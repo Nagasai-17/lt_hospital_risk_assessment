@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Doctor Dashboard - LT Hospital</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<header class="navbar">
+    <span class="hospital-name">LT Hospital</span>
+
+    <ul class="menu">
+        <li><a href="/home">Home</a></li>
+        <li>
+            <!-- LOGOUT BUTTON -->
+            <a href="/logout"
+               style="color:red; font-weight:600;">
+               Logout
+            </a>
+        </li>
+    </ul>
+</header>
+
+<!-- DASHBOARD SECTION -->
+<section class="section">
+    <h2>Doctor Dashboard</h2>
+
+    <button onclick="loadAppointments()">View Appointments</button>
+
+    <div id="appointments" style="margin-top:25px;"></div>
+</section>
+
+<footer>
+    © 2026 LT Hospital. All Rights Reserved.
+</footer>
+
+<script>
+function loadAppointments() {
+    fetch("/appointments")
+        .then(res => res.json())
+        .then(data => {
+            let html = "";
+
+            if (data.length === 0) {
+                html = "<p>No appointments available.</p>";
+            } else {
+                data.forEach(app => {
+                    const riskColor = app.risk_level === "High Risk" ? "red" : "green";
+
+                    html += `
+                        <div style="
+                            border-left: 6px solid ${riskColor};
+                            background: #f9f9f9;
+                            padding: 15px;
+                            margin-bottom: 15px;
+                            border-radius: 8px;
+                        ">
+                            <p><b>Patient Name:</b> ${app.patient_name}</p>
+                            <p><b>Risk Level:</b>
+                                <span style="color:${riskColor}; font-weight:600;">
+                                    ${app.risk_level}
+                                </span>
+                            </p>
+                            <p><b>Priority:</b> ${app.priority}</p>
+                            <p><b>Severity Score:</b> ${app.severity_score}</p>
+                            <p><b>Symptoms:</b> ${app.symptoms.join(", ")}</p>
+
+                            <button
+                                style="margin-top:10px; background:#0b4f8a;"
+                                onclick="deleteAppointment(${app.id})">
+                                Mark as Consulted
+                            </button>
+                        </div>
+                    `;
+                });
+            }
+
+            document.getElementById("appointments").innerHTML = html;
+        });
+}
+
+function deleteAppointment(id) {
+    if (!confirm("Confirm consultation completed?")) return;
+
+    fetch(`/delete-appointment/${id}`, {
+        method: "DELETE"
+    })
+    .then(res => res.json())
+    .then(data => {
+        alert(data.message);
+        loadAppointments();
+    });
+}
+</script>
+
+</body>
+</html>

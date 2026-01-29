@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Book Appointment - LT Hospital</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- NAVBAR -->
+<header class="navbar">
+    <span class="hospital-name">LT Hospital</span>
+
+    <ul class="menu">
+        <li><a href="/home">Home</a></li>
+        <li><a href="/about">About</a></li>
+        <li><a href="/packages">Packages</a></li>
+        <li><a href="/specialities">Specialities</a></li>
+        <li><a href="/contact">Contact</a></li>
+    </ul>
+</header>
+
+<!-- BOOKING SECTION -->
+<section class="hero-bg">
+    <div class="form-card">
+
+        <h2>Book Appointment</h2>
+
+        <input type="text" id="name" placeholder="Patient Name">
+
+        <label class="form-label">Select Symptoms</label>
+
+        <select id="symptoms" multiple class="symptom-dropdown">
+            <option>itching</option>
+            <option>skin_rash</option>
+            <option>continuous_sneezing</option>
+            <option>joint_pain</option>
+            <option>vomiting</option>
+            <option>fatigue</option>
+            <option>headache</option>
+            <option>high_fever</option>
+            <option>breathlessness</option>
+            <option>chest_pain</option>
+            <option>cough</option>
+            <option>lethargy</option>
+            <option>ulcers_on_tongue</option>
+            <option>shivering</option>
+            <option>restlessness</option>
+            <option>acidity</option>
+            <option>stomach_pain</option>
+            <option>chills</option>
+
+            <!-- (you already have the full list, keep it here) -->
+        </select>
+
+        <small class="hint">
+            Hold <b>Ctrl</b> (Windows) / <b>Cmd</b> (Mac) to select multiple symptoms
+        </small>
+
+        <button onclick="bookAppointment()">Confirm Appointment</button>
+
+        <div id="result"></div>
+    </div>
+</section>
+
+<footer>
+    © 2026 LT Hospital. All Rights Reserved.
+</footer>
+
+<script>
+function bookAppointment() {
+    const name = document.getElementById("name").value;
+    const options = document.getElementById("symptoms").selectedOptions;
+    const symptoms = Array.from(options).map(o => o.value);
+
+    fetch("/book-appointment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            patient_name: name,
+            symptoms: symptoms
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById("result").innerHTML = `
+            <p><b>Risk Level:</b> ${data.risk_level}</p>
+            <p><b>Priority:</b> ${data.priority}</p>
+            <p style="color:green;"><b>Appointment Confirmed</b></p>
+        `;
+    });
+}
+</script>
+
+</body>
+</html>

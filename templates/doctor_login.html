@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Doctor Login - LT Hospital</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="navbar">
+    <span class="hospital-name">LT Hospital</span>
+    <ul class="menu">
+        <li><a href="/home">Home</a></li>
+    </ul>
+</header>
+
+<section class="hero-bg">
+    <div class="form-card">
+        <h2>Doctor Login</h2>
+
+        {% if error %}
+            <p style="color:red; text-align:center;">{{ error }}</p>
+        {% endif %}
+
+        <form method="POST" action="/doctor-login">
+            <input type="text" name="username" placeholder="Doctor Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit">Login</button>
+        </form>
+    </div>
+</section>
+
+<footer>
+    © 2026 LT Hospital. All Rights Reserved.
+</footer>
+
+</body>
+</html>
