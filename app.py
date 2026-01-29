@@ -3,8 +3,16 @@ import sqlite3
 import joblib
 import os
 
+# -------------------- APP SETUP --------------------
+
 app = Flask(__name__)
 app.secret_key = "lt_hospital_secret_key"
+
+# REQUIRED FOR RENDER (HTTPS SESSIONS)
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=True
+)
 
 # -------------------- DATABASE --------------------
 
@@ -50,22 +58,29 @@ def patient():
 
 @app.route("/book-appointment", methods=["POST"])
 def book_appointment():
-    data = request.json
+    # SUPPORT BOTH JSON & FORM DATA (IMPORTANT FOR LIVE SERVER)
+    if request.is_json:
+        data = request.get_json()
+        patient_name = data.get("patient_name")
+        symptoms = data.get("symptoms", [])
+    else:
+        patient_name = request.form.get("patient_name")
+        symptoms = request.form.getlist("symptoms")
 
-    patient_name = data.get("patient_name")
-    symptoms = data.get("symptoms", [])
+    if not patient_name or not symptoms:
+        return jsonify({"error": "Patient name and symptoms required"}), 400
 
-    # Simple severity logic (same as your ML flow)
     severity_score = len(symptoms) * 5
 
-    risk_level = "Low Risk"
-    priority = 3
     if severity_score >= 15:
         risk_level = "High Risk"
         priority = 1
     elif severity_score >= 10:
         risk_level = "Medium Risk"
         priority = 2
+    else:
+        risk_level = "Low Risk"
+        priority = 3
 
     conn = get_db()
     conn.execute("""
