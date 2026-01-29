@@ -1,66 +1,29 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session
-import pandas as pd
-import numpy as np
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 import sqlite3
-from joblib import load
+import joblib
+import os
 
 app = Flask(__name__)
 app.secret_key = "lt_hospital_secret_key"
 
-# =============================
-# DOCTOR CREDENTIALS (DEMO)
-# =============================
-DOCTOR_USERNAME = "doctor"
-DOCTOR_PASSWORD = "doctor123"
+# -------------------- DATABASE --------------------
 
-# =============================
-# LOAD ML MODEL
-# =============================
-model = load("ml/risk_model.pkl")
+DB_NAME = "appointments.db"
 
-# =============================
-# LOAD SYMPTOM SEVERITY DATA
-# =============================
-symptom_df = pd.read_csv("data/Symptom-severity.csv")
-symptom_weight_map = dict(
-    zip(symptom_df["Symptom"].str.lower(), symptom_df["weight"])
-)
-
-# =============================
-# DATABASE HELPERS
-# =============================
-def get_db_connection():
-    conn = sqlite3.connect("appointments.db")
+def get_db():
+    conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
-def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS appointments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            patient_name TEXT NOT NULL,
-            symptoms TEXT NOT NULL,
-            severity_score INTEGER,
-            risk_level TEXT,
-            priority INTEGER
-        )
-    """)
-    conn.commit()
-    conn.close()
+# -------------------- LOAD ML MODEL --------------------
 
-init_db()
+MODEL_PATH = os.path.join("ml", "risk_model.pkl")
+model = joblib.load(MODEL_PATH)
 
-# =============================
-# HOME & STATIC PAGES
-# =============================
+# -------------------- HOME & STATIC PAGES --------------------
+
 @app.route("/")
-def status():
-    return "Doctor-Patient Risk Assessment API is running"
-
-@app.route("/home")
-def home():
+def index():
     return render_template("index.html")
 
 @app.route("/about")
@@ -79,81 +42,40 @@ def packages():
 def specialities():
     return render_template("specialities.html")
 
-# =============================
-# PATIENT PAGE
-# =============================
+# -------------------- PATIENT --------------------
+
 @app.route("/patient")
-def patient_ui():
+def patient():
     return render_template("patient.html")
 
-# =============================
-# DOCTOR LOGIN
-# =============================
-@app.route("/doctor-login")
-def doctor_login_page():
-    return render_template("doctor_login.html")
-
-@app.route("/doctor-login", methods=["POST"])
-def doctor_login():
-    username = request.form.get("username")
-    password = request.form.get("password")
-
-    if username == DOCTOR_USERNAME and password == DOCTOR_PASSWORD:
-        session["doctor_logged_in"] = True
-        return redirect(url_for("doctor_ui"))
-    else:
-        return render_template(
-            "doctor_login.html",
-            error="Invalid username or password"
-        )
-
-@app.route("/logout")
-def logout():
-    session.pop("doctor_logged_in", None)
-    return redirect(url_for("home"))
-
-# =============================
-# DOCTOR DASHBOARD (PROTECTED)
-# =============================
-@app.route("/doctor")
-def doctor_ui():
-    if not session.get("doctor_logged_in"):
-        return redirect(url_for("doctor_login_page"))
-    return render_template("doctor.html")
-
-# =============================
-# BOOK APPOINTMENT
-# =============================
 @app.route("/book-appointment", methods=["POST"])
 def book_appointment():
-    data = request.get_json()
+    data = request.json
 
     patient_name = data.get("patient_name")
     symptoms = data.get("symptoms", [])
 
-    if not patient_name or not symptoms:
-        return jsonify({"error": "Patient name and symptoms required"}), 400
+    # Simple severity logic (same as your ML flow)
+    severity_score = len(symptoms) * 5
 
-    total_severity = sum(
-        symptom_weight_map.get(sym.lower(), 0)
-        for sym in symptoms
-    )
+    risk_level = "Low Risk"
+    priority = 3
+    if severity_score >= 15:
+        risk_level = "High Risk"
+        priority = 1
+    elif severity_score >= 10:
+        risk_level = "Medium Risk"
+        priority = 2
 
-    prediction = model.predict(np.array([[total_severity]]))[0]
-    risk = "High Risk" if prediction == 1 else "Low Risk"
-    priority = 1 if risk == "High Risk" else 2
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO appointments
-        (patient_name, symptoms, severity_score, risk_level, priority)
+    conn = get_db()
+    conn.execute("""
+        INSERT INTO appointments (patient_name, symptoms, severity_score, risk_level, priority)
         VALUES (?, ?, ?, ?, ?)
     """, (
         patient_name,
         ",".join(symptoms),
-        total_severity,
-        risk,
+        severity_score,
+        risk_level,
         priority
     ))
     conn.commit()
@@ -161,60 +83,72 @@ def book_appointment():
 
     return jsonify({
         "message": "Appointment booked successfully",
-        "risk_level": risk,
+        "patient_name": patient_name,
+        "risk_level": risk_level,
         "priority": priority
     })
 
-# =============================
-# VIEW APPOINTMENTS (DOCTOR)
-# =============================
-@app.route("/appointments")
-def view_appointments():
-    if not session.get("doctor_logged_in"):
-        return redirect(url_for("doctor_login_page"))
+# -------------------- DOCTOR LOGIN --------------------
 
-    conn = get_db_connection()
+@app.route("/doctor-login", methods=["GET", "POST"])
+def doctor_login():
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+
+        if username == "doctor" and password == "doctor123":
+            session["doctor_logged_in"] = True
+            return redirect(url_for("doctor_dashboard"))
+
+        return render_template("doctor_login.html", error="Invalid credentials")
+
+    return render_template("doctor_login.html")
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("index"))
+
+# -------------------- DOCTOR DASHBOARD --------------------
+
+@app.route("/doctor")
+def doctor_dashboard():
+    if not session.get("doctor_logged_in"):
+        return redirect(url_for("doctor_login"))
+
+    conn = get_db()
     rows = conn.execute("""
         SELECT * FROM appointments
         ORDER BY priority ASC, id ASC
     """).fetchall()
     conn.close()
 
-    return jsonify([
-        {
-            "id": row["id"],
-            "patient_name": row["patient_name"],
-            "symptoms": row["symptoms"].split(","),
-            "severity_score": row["severity_score"],
-            "risk_level": row["risk_level"],
-            "priority": row["priority"]
-        }
-        for row in rows
-    ])
+    appointments = []
+    for r in rows:
+        appointments.append({
+            "id": r["id"],
+            "patient_name": r["patient_name"],
+            "symptoms": r["symptoms"].split(","),
+            "severity_score": r["severity_score"],
+            "risk_level": r["risk_level"],
+            "priority": r["priority"]
+        })
 
-# =============================
-# DELETE APPOINTMENT (DOCTOR)
-# =============================
-@app.route("/delete-appointment/<int:appointment_id>", methods=["DELETE"])
+    return render_template("doctor.html", appointments=appointments)
+
+@app.route("/delete-appointment/<int:appointment_id>", methods=["POST"])
 def delete_appointment(appointment_id):
     if not session.get("doctor_logged_in"):
-        return jsonify({"error": "Unauthorized"}), 403
+        return redirect(url_for("doctor_login"))
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "DELETE FROM appointments WHERE id = ?",
-        (appointment_id,)
-    )
+    conn = get_db()
+    conn.execute("DELETE FROM appointments WHERE id = ?", (appointment_id,))
     conn.commit()
     conn.close()
 
-    return jsonify({
-        "message": "Appointment marked as consulted and removed"
-    })
+    return redirect(url_for("doctor_dashboard"))
 
-# =============================
-# RUN SERVER
-# =============================
+# -------------------- RUN APP --------------------
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
